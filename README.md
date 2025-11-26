@@ -113,7 +113,8 @@ auto best = tuner.get_or_tune(B,H,S,D, causal, q,k,v,o);
 
 ### Vanilla attention
 
-For a single head with $Q\in\mathbb{R}^{n\times d}$, $K\in\mathbb{R}^{n\times d}$, $V\in\mathbb{R}^{n\times d_v}$ and scale $\alpha = 1/\sqrt{d}$:
+
+For a single head with $Q\in\mathbb{R}^{n\times d} ,  K\in\mathbb{R}^{n\times d} , V\in\mathbb{R}^{n\times d_v}$ and scale $\alpha = 1/\sqrt{d}$:
 
 $$\mathrm{Attn}(Q,K,V)
 = \mathrm{softmax}\big(\alpha, QK^\top\big),V
@@ -144,23 +145,20 @@ Process keys in tiles $(T_1, T_2, \dots, T_t)$. For a fixed query row (i), maint
 * running denominator $\ell = \sum_{j\in \text{seen}} e^{s_{ij}-m}$,
 * running numerator vector $\mathbf{a} = \sum_{j\in \text{seen}} e^{s_{ij}-m}, v_j$.
 
-**Derivation for merging a new tile $T$:**
+**Derivation for merging a new tile (T):**
 
-Let $m_T=\max_{j\in T} s_{ij}$ and $m'=\max(m, m_T)$. Then
+Let $$m_T=\max_{j\in T} s_{ij} $$ and $$m'=\max(m, m_T) $$.
+
+Then
+
+
 $$
 \begin{aligned}
-\ell' &=
-\sum_{j\in \text{seen}} e^{s_{ij}-m'}
-
-* \sum_{j\in T} e^{s_{ij}-m'} \
-  &= e^{m-m'} \underbrace{\sum_{j\in \text{seen}} e^{s_{ij}-m}}_{\ell}
-* \sum_{j\in T} e^{s_{ij}-m'},
-  \
-  \mathbf{a}' &=
-  e^{m-m'} \mathbf{a}
-* \sum_{j\in T} e^{s_{ij}-m'}, v_j.
-  \end{aligned}
-  $$
+\ell' &= \sum_{j\in \text{seen}} e^{s_{ij}-m'} + \sum_{j\in T} e^{s_{ij}-m'} \\
+      &= e^{m-m'} \underbrace{\sum_{j\in \text{seen}} e^{s_{ij}-m}}_{\ell} + \sum_{j\in T} e^{s_{ij}-m'} \\
+\mathbf{a}' &= e^{m-m'} \mathbf{a} + \sum_{j\in T} e^{s_{ij}-m'} v_j
+\end{aligned}
+$$
 
 This is the **online/streaming softmax** update. After all tiles:
 
@@ -176,7 +174,7 @@ It is **exact** (identical to full softmax), because we merely change the refere
 * **Causal**: set logits for $j>i$ to $-\infty$. In streaming, simply **skip** masked keys, i.e., do not update $\ell$ or $\mathbf{a}$ for them.
 * **Padding**: if valid key length is $L$, ignore $j\ge L$.
 
-If a full tile is masked, no updates occur; state $(m,\ell,\mathbf{a})$ remains unchanged.
+If a full tile is masked, no updates occur; state $m,\ell,\mathbf{a}$ remains unchanged.
 
 ### IO & complexity
 
@@ -260,9 +258,9 @@ Barriers only at tile boundaries. On SM80+, enable `FA_USE_CP_ASYNC` to issue `c
 **SMEM footprint** (row‑split kernel):
 We keep two stages of (K) and two of (V) in shared memory:
 
-[
+$$
 \text{SMEM bytes} = 4 \cdot \text{tile_n} \cdot D \cdot \mathrm{sizeof}(\mathrm{Storage}),
-]
+$$
 where `Storage` is the input type (`float`/`half`/`bfloat16`). Choose `tile_n` to fit your device SMEM.
 
 ### Row‑split multi‑CTA per head
@@ -275,23 +273,23 @@ where `Storage` is the input type (`float`/`half`/`bfloat16`). Choose `tile_n` t
 
 When you also want to split along **keys** (e.g., keep CTAs smaller or match cache limits):
 
-1. **Partial pass**: launch (S_K) splits; each split processes a disjoint key range ([k_{\text{begin}},k_{\text{end}})). It outputs **per‑row partials** ((m^{(t)}, \ell^{(t)}, \mathbf{a}^{(t)})) into a workspace (FP32).
+1. **Partial pass**: launch (S_K) splits; each split processes a disjoint key range $[k_{\text{begin}},k_{\text{end}})$. It outputs **per‑row partials** $(m^{(t)}, \ell^{(t)}, \mathbf{a}^{(t)})$ into a workspace (FP32).
 2. **Merge pass**: per row, merge all splits via the same online‑softmax merge rule:
 
-[
+$$
 \begin{aligned}
 m &= \max_t m^{(t)},\
 \ell &= \sum_t e^{m^{(t)}-m},\ell^{(t)},\quad
 \mathbf{a} = \sum_t e^{m^{(t)}-m},\mathbf{a}^{(t)},\
 \mathbf{o} &= \mathbf{a}/\ell.
 \end{aligned}
-]
+$$
 
-**Workspace size** for (S_K) splits:
+**Workspace size** for $S_K$ splits:
 
-[
+$$
 \mathrm{bytes} = S_K \cdot B \cdot H \cdot S \cdot \big(2 + D\big)\cdot \mathrm{sizeof(float)}.
-]
+$$
 
 Row‑split and split‑K can be combined if needed (row‑split for parallelism; split‑K for memory/capacity).
 
@@ -436,36 +434,37 @@ target_compile_definitions(flashattn PRIVATE
 
 **Why the online merge is exact**
 
-Given two disjoint key sets (A,B), with per‑row maxima (m_A, m_B), let
-[
-\ell_A=\sum_{j\in A} e^{s_j - m_A},\quad
-\mathbf{a}*A = \sum*{j\in A} e^{s_j - m_A} v_j,
-]
-and similarly for (B). For (m'=\max(m_A,m_B)),
-[
-\sum_{j\in A\cup B} e^{s_j}
-= e^{m'}!\left(e^{m_A-m'}\ell_A + e^{m_B-m'}\ell_B\right),
-]
+Given two disjoint key sets $A, B$, with per‑row maxima $m_A, m_B$, let
+
+$$\ell_A = \sum_{j\in A} e^{s_j - m_A},\quad
+\mathbf{a}_A = \sum_{j\in A} e^{s_j - m_A} v_j,$$
+
+and similarly for $B$. For $m'=\max(m_A, m_B)$,
+
+$$\sum_{j\in A\cup B} e^{s_j}
+= e^{m'} \left(e^{m_A-m'}\ell_A + e^{m_B-m'}\ell_B\right),$$
+
 and
-[
-\sum_{j\in A\cup B} e^{s_j} v_j
-= e^{m'}!\left(e^{m_A-m'}\mathbf{a}_A + e^{m_B-m'}\mathbf{a}_B\right).
-]
+
+$$\sum_{j\in A\cup B} e^{s_j} v_j
+= e^{m'} \left(e^{m_A-m'}\mathbf{a}_A + e^{m_B-m'}\mathbf{a}_B\right).$$
+
+
 Thus the merged state is
-[
-\ell' = e^{m_A-m'}\ell_A + e^{m_B-m'}\ell_B,\quad
-\mathbf{a}' = e^{m_A-m'}\mathbf{a}_A + e^{m_B-m'}\mathbf{a}_B,
-]
-and the final output (\mathbf{o}=\mathbf{a}'/\ell') equals the full softmax result. Streaming over tiles applies the same algebra iteratively.
+
+$$\ell' = e^{m_A-m'}\ell_A + e^{m_B-m'}\ell_B,\quad
+\mathbf{a}' = e^{m_A-m'}\mathbf{a}_A + e^{m_B-m'}\mathbf{a}_B,$$
+
+and the final output $\mathbf{o}=\mathbf{a}'/\ell'$ equals the full softmax result. Streaming over tiles applies the same algebra iteratively.
 
 **HBM traffic sketch**
 
-* Naïve materialization: write/read (S\in\mathbb{R}^{n\times n}) and (P\in\mathbb{R}^{n\times n}) → (O(n^2)) IO.
-* FlashAttention: read (Q) once, stream $K,V$ in tiles (read once), write (O) once → (O(nd) + O(nd_v)) IO. Arithmetic is unchanged; performance scales with IO reduction.
+* Naïve materialization: write/read $S\in\mathbb{R}^{n\times n}$ and $P\in\mathbb{R}^{n\times n}$ → $O(n^2)$ IO.
+* FlashAttention: read $Q$ once, stream $K,V$ in tiles (read once), write $O$ once → $O(nd) + O(nd_v)$ IO. Arithmetic is unchanged; performance scales with IO reduction.
 
 **Numerics**
 
-* With FP16/BF16 inputs, convert to FP32 for accumulation, keep the log‑sum‑exp reference (m), and scale contributions by (\exp(s-m)). This keeps intermediate magnitudes (\mathcal{O}(1)) and avoids overflow (e.g., (e^{80}) in FP32 is already huge without stabilization).
+* With FP16/BF16 inputs, convert to FP32 for accumulation, keep the log‑sum‑exp reference $m$, and scale contributions by $\exp(s-m)$. This keeps intermediate magnitudes $\mathcal{O}(1)$ and avoids overflow (e.g., $e^{80}$ in FP32 is already huge without stabilization).
 
 ---
 
