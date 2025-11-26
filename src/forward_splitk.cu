@@ -78,8 +78,6 @@ __global__ void forward_splitk_partial_kernel(
   }
 
   // write partials: layout [split, B, H, S]
-  
-  // [FIX] Removed 'splits' variable here to avoid warning
   // Instead: the host passes separate base pointers for each split range, so
   // we write to offset 0 here. The host offsets the pointers per-split.
   if (row_active) {
