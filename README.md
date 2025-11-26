@@ -1,6 +1,6 @@
 # FlashAttention‑CUDA (exact, IO‑aware attention)
 
-**FlashAttention** computes exact scaled dot‑product attention while minimizing **global memory (HBM) IO**. Instead of materializing the (n\times n) score/probability matrices, it streams **(K,V)** tiles through on‑chip memory (shared/reg) and uses a numerically‑stable **online softmax** to produce the exact result. This repo provides a clean, modular CUDA implementation with production features:
+**FlashAttention** computes exact scaled dot‑product attention while minimizing **global memory (HBM) IO**. Instead of materializing the $(n\times n)$ score/probability matrices, it streams **(K,V)** tiles through on‑chip memory (shared/reg) and uses a numerically‑stable **online softmax** to produce the exact result. This repo provides a clean, modular CUDA implementation with production features:
 
 * ✅ **Exact** forward pass (no approximation) with **online softmax**
 * ✅ **Row‑split multi‑CTA per head** for high occupancy
