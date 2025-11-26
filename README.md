@@ -127,32 +127,32 @@ A naïve implementation materializes (S=\alpha QK^\top\in\mathbb{R}^{n\times n})
 
 For a row (x\in\mathbb{R}^m), the stable softmax rescales by the max:
 
-[
+$$
 \mathrm{softmax}(x)_j
 = \frac{e^{x_j - m}}{\sum_k e^{x_k - m}},\quad m=\max_j x_j.
-]
+$$
 
 Subtracting (m) avoids overflow/underflow.
 
 ### Online (streaming) softmax derivation
 
 We want the softmax output
-[
+$$
 o_i = \sum_{j=1}^n p_{ij},v_j,
 \quad p_{ij} = \frac{e^{s_{ij}}}{\sum_{k=1}^n e^{s_{ik}}},
 \quad s_{ij} = \alpha, q_i^\top k_j.
-]
+$$
 
-Process keys in tiles (T_1, T_2, \dots, T_t). For a fixed query row (i), maintain:
+Process keys in tiles $(T_1, T_2, \dots, T_t)$. For a fixed query row (i), maintain:
 
-* running max (m),
-* running denominator (\ell = \sum_{j\in \text{seen}} e^{s_{ij}-m}),
-* running numerator vector (\mathbf{a} = \sum_{j\in \text{seen}} e^{s_{ij}-m}, v_j).
+* running max $(m)$,
+* running denominator $(\ell = \sum_{j\in \text{seen}} e^{s_{ij}-m})$,
+* running numerator vector $(\mathbf{a} = \sum_{j\in \text{seen}} e^{s_{ij}-m}, v_j)$.
 
-**Derivation for merging a new tile (T):**
+**Derivation for merging a new tile $(T)$:**
 
-Let (m_T=\max_{j\in T} s_{ij}) and (m'=\max(m, m_T)). Then
-[
+Let $(m_T=\max_{j\in T} s_{ij}) and (m'=\max(m, m_T))$. Then
+$$
 \begin{aligned}
 \ell' &=
 \sum_{j\in \text{seen}} e^{s_{ij}-m'}
@@ -165,20 +165,20 @@ Let (m_T=\max_{j\in T} s_{ij}) and (m'=\max(m, m_T)). Then
   e^{m-m'} \mathbf{a}
 * \sum_{j\in T} e^{s_{ij}-m'}, v_j.
   \end{aligned}
-  ]
+  $$
 
 This is the **online/streaming softmax** update. After all tiles:
-[
+$$
 o_i = \frac{\mathbf{a}}{\ell}.
-]
-It is **exact** (identical to full softmax), because we merely change the reference (m) via algebraic rescaling.
+$$
+It is **exact** (identical to full softmax), because we merely change the reference $m$ via algebraic rescaling.
 
 ### Causal & padding masks
 
-* **Causal**: set logits for (j>i) to (-\infty). In streaming, simply **skip** masked keys, i.e., do not update (\ell) or (\mathbf{a}) for them.
-* **Padding**: if valid key length is (L), ignore (j\ge L).
+* **Causal**: set logits for $j>i$ to $-\infty$. In streaming, simply **skip** masked keys, i.e., do not update $\ell$ or $\mathbf{a}$ for them.
+* **Padding**: if valid key length is $L$, ignore $j\ge L$.
 
-If a full tile is masked, no updates occur; state ((m,\ell,\mathbf{a})) remains unchanged.
+If a full tile is masked, no updates occur; state $(m,\ell,\mathbf{a})$ remains unchanged.
 
 ### IO & complexity
 
