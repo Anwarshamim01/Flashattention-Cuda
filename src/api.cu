@@ -52,7 +52,7 @@ void flash_attention_forward_splitk(
   size_t m_bytes = rows_per_split * sizeof(float);
   size_t l_bytes = rows_per_split * sizeof(float);
   
-  // [FIX] Removed unused acc_bytes variable
+  
   // size_t acc_bytes = rows_per_split * D * sizeof(float);
 
   uint8_t* base = reinterpret_cast<uint8_t*>(workspace);
