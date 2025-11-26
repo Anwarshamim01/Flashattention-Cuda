@@ -1,6 +1,6 @@
 # FlashAttention‑CUDA (exact, IO‑aware attention)
 
-**FlashAttention** computes exact scaled dot‑product attention while minimizing **global memory (HBM) IO**. Instead of materializing the $(n\times n)$ score/probability matrices, it streams **(K,V)** tiles through on‑chip memory (shared/reg) and uses a numerically‑stable **online softmax** to produce the exact result. This repo provides a clean, modular CUDA implementation with production features:
+**FlashAttention** computes exact scaled dot‑product attention while minimizing **global memory (HBM) IO**. Instead of materializing the $(n\times n)$ score/probability matrices, it streams **$K,V$** tiles through on‑chip memory (shared/reg) and uses a numerically‑stable **online softmax** to produce the exact result. This repo provides a clean, modular CUDA implementation with production features:
 
 * ✅ **Exact** forward pass (no approximation) with **online softmax**
 * ✅ **Row‑split multi‑CTA per head** for high occupancy
@@ -113,30 +113,27 @@ auto best = tuner.get_or_tune(B,H,S,D, causal, q,k,v,o);
 
 ### Vanilla attention
 
-For a single head with (Q\in\mathbb{R}^{n\times d}), (K\in\mathbb{R}^{n\times d}), (V\in\mathbb{R}^{n\times d_v}) and scale (\alpha = 1/\sqrt{d}):
+For a single head with $Q\in\mathbb{R}^{n\times d}$, $K\in\mathbb{R}^{n\times d}$, $V\in\mathbb{R}^{n\times d_v}$ and scale $\alpha = 1/\sqrt{d}$:
 
-[
-\mathrm{Attn}(Q,K,V)
+$$\mathrm{Attn}(Q,K,V)
 = \mathrm{softmax}\big(\alpha, QK^\top\big),V
-\quad\in\mathbb{R}^{n\times d_v}.
-]
+\quad\in\mathbb{R}^{n\times d_v}.$$
 
-A naïve implementation materializes (S=\alpha QK^\top\in\mathbb{R}^{n\times n}), applies row‑wise softmax to get (P), then outputs (O=PV). The memory footprint and traffic of (S) and (P) are **quadratic in (n)**.
+A naïve implementation materializes $S=\alpha QK^\top\in\mathbb{R}^{n\times n}$, applies row‑wise softmax to get $P$, then outputs $O=PV$. The memory footprint and traffic of $S$ and $P$ are **quadratic in $n$**.
 
 ### Numerically stable softmax
 
-For a row (x\in\mathbb{R}^m), the stable softmax rescales by the max:
+For a row $x\in\mathbb{R}^m$, the stable softmax rescales by the max:
 
-$$
-\mathrm{softmax}(x)_j
-= \frac{e^{x_j - m}}{\sum_k e^{x_k - m}},\quad m=\max_j x_j.
-$$
+$$\mathrm{softmax}(x)_j
+= \frac{e^{x_j - m}}{\sum_k e^{x_k - m}},\quad m=\max_j x_j.$$
 
-Subtracting (m) avoids overflow/underflow.
+Subtracting $m$ avoids overflow/underflow.
 
 ### Online (streaming) softmax derivation
 
-We want the softmax output
+We want the softmax output : 
+
 $$o_i = \sum_{j=1}^n p_{ij},v_j,
 \quad p_{ij} = \frac{e^{s_{ij}}}{\sum_{k=1}^n e^{s_{ik}}},
 \quad s_{ij} = \alpha, q_i^\top k_j.$$
@@ -144,12 +141,12 @@ $$o_i = \sum_{j=1}^n p_{ij},v_j,
 Process keys in tiles $(T_1, T_2, \dots, T_t)$. For a fixed query row (i), maintain:
 
 * running max $(m)$,
-* running denominator $(\ell = \sum_{j\in \text{seen}} e^{s_{ij}-m})$,
-* running numerator vector $(\mathbf{a} = \sum_{j\in \text{seen}} e^{s_{ij}-m}, v_j)$.
+* running denominator $\ell = \sum_{j\in \text{seen}} e^{s_{ij}-m}$,
+* running numerator vector $\mathbf{a} = \sum_{j\in \text{seen}} e^{s_{ij}-m}, v_j$.
 
-**Derivation for merging a new tile $(T)$:**
+**Derivation for merging a new tile $T$:**
 
-Let $(m_T=\max_{j\in T} s_{ij}) and (m'=\max(m, m_T))$. Then
+Let $m_T=\max_{j\in T} s_{ij}$ and $m'=\max(m, m_T)$. Then
 $$
 \begin{aligned}
 \ell' &=
@@ -166,9 +163,12 @@ $$
   $$
 
 This is the **online/streaming softmax** update. After all tiles:
+
+
 $$
 o_i = \frac{\mathbf{a}}{\ell}.
 $$
+
 It is **exact** (identical to full softmax), because we merely change the reference $m$ via algebraic rescaling.
 
 ### Causal & padding masks
@@ -180,25 +180,25 @@ If a full tile is masked, no updates occur; state $(m,\ell,\mathbf{a})$ remains 
 
 ### IO & complexity
 
-* **Arithmetic** stays (O(n d^2)) (per head) up to constants (dot products & accumulations).
-* **HBM IO** is the bottleneck at large (n). FlashAttention never writes/intermediates (S) or (P); it streams (K,V) and keeps partials in **shared/registers**. For a single head:
+* **Arithmetic** stays $O(n d^2)$ (per head) up to constants (dot products & accumulations).
+* **HBM IO** is the bottleneck at large $n$. FlashAttention never writes/intermediates $S$ or $P$; it streams $K,V$ and keeps partials in **shared/registers**. For a single head:
 
-  * Read (Q) once per row, read (K,V) once per tile, write (O) once.
-  * IO roughly (O(n d + n d_v)) rather than (O(n^2)) intermediates.
-* **Row‑split multi‑CTA** increases parallelism: multiple CTAs per head re‑read (K,V) but L2 helps amortize; the occupancy win typically dominates.
+  * Read $Q$ once per row, read $K,V$ once per tile, write $O$ once.
+  * IO roughly $O(n d + n d_v)\$ rather than $O(n^2)$ intermediates.
+* **Row‑split multi‑CTA** increases parallelism: multiple CTAs per head re‑read $K,V$ but L2 helps amortize; the occupancy win typically dominates.
 
 ### Numerical precision
 
-* Inputs (Q,K,V) may be **FP16/BF16/FP32**; **accumulation is FP32**.
-* Use (\alpha = 1/\sqrt{d}) scaling to keep logits in a well‑behaved range.
-* Online softmax keeps exponents centered via the running max (m), curbing overflow/underflow.
-* If (\ell=0) (fully masked row), we emit zeros.
+* Inputs $Q,K,V$ may be **FP16/BF16/FP32**; **accumulation is FP32**.
+* Use $\alpha = 1/\sqrt{d}$ scaling to keep logits in a well‑behaved range.
+* Online softmax keeps exponents centered via the running max $m$, curbing overflow/underflow.
+* If $\ell=0$ (fully masked row), we emit zeros.
 
 ---
 
 ## Algorithm & pseudocode
 
-For each batch (b), head (h), and query row (i), we process (K,V) in tiles:
+For each batch $b$, head $h$, and query row $i$, we process $K,V$ in tiles:
 
 ```text
 Initialize: m = -inf, l = 0, a[:] = 0
@@ -218,7 +218,7 @@ for key tile T = {j = k0 .. k0+N-1}:
 o[i,:] = a[:] / l
 ```
 
-We map each **query row to a consumer thread**; (K,V) tiles are cooperatively loaded by **producer warps** into shared memory (double‑buffered).
+We map each **query row to a consumer thread**; $K,V$ tiles are cooperatively loaded by **producer warps** into shared memory (double‑buffered).
 
 ---
 
@@ -235,7 +235,7 @@ We map each **query row to a consumer thread**; (K,V) tiles are cooperatively lo
 
 ### Warp specialization
 
-* **Producer warp(s)** only prefetch the **next** (K,V) tile from HBM to shared memory.
+* **Producer warp(s)** only prefetch the **next** $K,V$ tile from HBM to shared memory.
 * **Consumer warps** compute dot‑products and online softmax updates on the **current** tile.
 * This reduces barriers and hides memory latency versus “everyone does everything.”
 
@@ -461,7 +461,7 @@ and the final output (\mathbf{o}=\mathbf{a}'/\ell') equals the full softmax resu
 **HBM traffic sketch**
 
 * Naïve materialization: write/read (S\in\mathbb{R}^{n\times n}) and (P\in\mathbb{R}^{n\times n}) → (O(n^2)) IO.
-* FlashAttention: read (Q) once, stream (K,V) in tiles (read once), write (O) once → (O(nd) + O(nd_v)) IO. Arithmetic is unchanged; performance scales with IO reduction.
+* FlashAttention: read (Q) once, stream $K,V$ in tiles (read once), write (O) once → (O(nd) + O(nd_v)) IO. Arithmetic is unchanged; performance scales with IO reduction.
 
 **Numerics**
 
