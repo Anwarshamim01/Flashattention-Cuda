@@ -137,11 +137,9 @@ Subtracting (m) avoids overflow/underflow.
 ### Online (streaming) softmax derivation
 
 We want the softmax output
-$$
-o_i = \sum_{j=1}^n p_{ij},v_j,
+$$o_i = \sum_{j=1}^n p_{ij},v_j,
 \quad p_{ij} = \frac{e^{s_{ij}}}{\sum_{k=1}^n e^{s_{ik}}},
-\quad s_{ij} = \alpha, q_i^\top k_j.
-$$
+\quad s_{ij} = \alpha, q_i^\top k_j.$$
 
 Process keys in tiles $(T_1, T_2, \dots, T_t)$. For a fixed query row (i), maintain:
 
